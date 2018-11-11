@@ -8,8 +8,10 @@
 #define INVERTER_ID 0x0C0
 #define PDM_ID 0x28C
 
-// Max Coolant Temp
+// Coolant Temp
 #define MAX_COOLANT_TEMP 60
+#define THERMOSTAT_ON 30
+#define THERMOSTAT_OFF 25
 
 //Min Coolant Pressure
 #define MIN_COOLANT_PRESSURE 5
@@ -37,6 +39,7 @@ int __io_putchar(int ch) {
 
 #include "Can_Bus.h"
 #include "linear_scale.h"
+#include "thermostat.h"
 
 void SystemClock_Config(void);
 
@@ -44,6 +47,9 @@ Can_Bus *Can_Bus::instance = 0;
 bool stop = false;
 float coolant_temp = 0;
 float coolant_pressure = 0;
+
+linear_scale torque_scale = linear_scale(0, 100, MAX_TORQUE, 0);
+thermostat coolant_thermostat = thermostat(THERMOSTAT_ON, THERMOSTAT_OFF);
 
 int main(void) {
 
@@ -55,8 +61,6 @@ int main(void) {
 	MX_CAN_Init();
 
 	Can_Bus *can_bus = can_bus->getInstance();
-
-	linear_scale torque_scale = linear_scale(0, 100, MAX_TORQUE, 0);
 
 //	Set Safety Line High
 	HAL_GPIO_WritePin(SAFETY_CONTROL_GPIO_Port, SAFETY_CONTROL_Pin,
@@ -117,14 +121,23 @@ void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef *candle) {
 }
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
+	Can_Bus *can_bus = can_bus->getInstance();
 
 //	Yea, do some fancy calibrations and shit here
 
 	bool coolant_ok = coolant_temp < MAX_COOLANT_TEMP;
 	bool pressure_ok = coolant_pressure > MIN_COOLANT_PRESSURE;
 
+	if (!(pressure_ok && coolant_ok)) {
+		stop = true;
+	}
 
-
+	if (coolant_thermostat.checkToggle(coolant_temp)) {
+		if (coolant_thermostat.getStatus())
+			can_bus->cooling_on();
+		else
+			can_bus->cooling_off();
+	}
 }
 
 void SystemClock_Config(void) {
