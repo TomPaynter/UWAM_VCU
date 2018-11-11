@@ -8,6 +8,12 @@
 #define INVERTER_ID 0x0C0
 #define PDM_ID 0x28C
 
+// Max Coolant Temp
+#define MAX_COOLANT_TEMP 60
+
+//Min Coolant Pressure
+#define MIN_COOLANT_PRESSURE 5
+
 // NU_TALK_VALUE - debug please not to be released if present
 #define NU_TALK_VALUE 0
 
@@ -32,11 +38,12 @@ int __io_putchar(int ch) {
 #include "Can_Bus.h"
 #include "linear_scale.h"
 
-
 void SystemClock_Config(void);
 
 Can_Bus *Can_Bus::instance = 0;
 bool stop = false;
+float coolant_temp = 0;
+float coolant_pressure = 0;
 
 int main(void) {
 
@@ -68,7 +75,9 @@ int main(void) {
 		bool safety_ok = (HAL_GPIO_ReadPin(SAFETY_GPIO_Port, SAFETY_Pin)
 				== GPIO_PIN_SET);
 
-		if (bp_ok && start_ok && safety_ok) {
+		bool coolant_ok = coolant_temp < MAX_COOLANT_TEMP;
+
+		if (bp_ok && start_ok && safety_ok && coolant_ok) {
 //			Now in "RTD Sound" State
 // 			Sound RTD Horn
 			HAL_GPIO_WritePin(RTD_HORN_GPIO_Port, RTD_HORN_Pin, GPIO_PIN_SET);
@@ -79,10 +88,13 @@ int main(void) {
 			can_bus->arm_inverter();
 
 			while (!stop) {
-				uint16_t torque_command = (uint16_t) torque_scale.int_scale(NU_TALK_VALUE);
-				can_bus->set_torque(torque_command);
+				if (can_bus->recievedPedalBox()) {
+					can_bus->clearPedalBox();
+					uint16_t torque_command = (uint16_t) torque_scale.int_scale(
+					NU_TALK_VALUE);
+					can_bus->set_torque(torque_command);
+				}
 			}
-
 		}
 	}
 }
@@ -92,7 +104,8 @@ void emergency_stop() {
 	stop = true;
 
 //	Forever Stationary
-	while(1);
+	while (1)
+		;
 }
 
 void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef *candle) {
@@ -100,6 +113,17 @@ void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef *candle) {
 
 	Can_Bus *can_bus = can_bus->getInstance();
 	can_bus->rx_update();
+
+}
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
+
+//	Yea, do some fancy calibrations and shit here
+
+	bool coolant_ok = coolant_temp < MAX_COOLANT_TEMP;
+	bool pressure_ok = coolant_pressure > MIN_COOLANT_PRESSURE;
+
+
 
 }
 

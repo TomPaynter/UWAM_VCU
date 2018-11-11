@@ -26,7 +26,7 @@ private:
 	uint8_t cooling_state;
 	uint16_t current_torque;
 
-	uint8_t recievedpedalbox;
+	bool recievedpedalbox;
 
 	Can_Bus(void) {
 		torque_request = 0;
@@ -82,7 +82,7 @@ public:
 	uint8_t get_brake_pressure(){
 		return brake_pressure;
 	}
-	uint8_t recievedPedalBox() {
+	bool recievedPedalBox() {
 		return recievedpedalbox;
 	}
 
