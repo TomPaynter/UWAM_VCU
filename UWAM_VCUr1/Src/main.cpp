@@ -1,24 +1,42 @@
+// Inverter Settings
+#define MAX_TORQUE 140
+
+// CAN Receive IDs
+#define PEDALBOX_ID 0x3C
+
+// CAN Transmit IDs
+#define INVERTER_ID 0x0C0
+#define PDM_ID 0x28C
+
+// NU_TALK_VALUE - debug please not to be released if present
+#define NU_TALK_VALUE 0
+
+// ****** End User Settings ************************************
+
 extern "C" {
-	#include "main.h"
-	#include "stm32f0xx_hal.h"
-	#include "can.h"
-	#include "adc.h"
-	#include "gpio.h"
+#include "main.h"
+#include "stm32f0xx_hal.h"
+#include "can.h"
+//#include "adc.h"
+#include "usart.h"
+#include "gpio.h"
 
-	#include <stdio.h>
-	int __io_putchar(int ch) {
-
-	//	uint8_t character = (uint8_t) ch;
-	//	HAL_UART_Transmit(&huart2, &character, 1, 1000);
-		return ch;
-	}
+#include <stdio.h>
+int __io_putchar(int ch) {
+	uint8_t character = (uint8_t) ch;
+	HAL_UART_Transmit(&huart1, &character, 1, 1000);
+	return ch;
+}
 }
 
 #include "Can_Bus.h"
+#include "linear_scale.h"
+
 
 void SystemClock_Config(void);
 
 Can_Bus *Can_Bus::instance = 0;
+bool stop = false;
 
 int main(void) {
 
@@ -31,13 +49,50 @@ int main(void) {
 
 	Can_Bus *can_bus = can_bus->getInstance();
 
-	can_bus->arm_inverter();
-	can_bus->set_torque(10);
+	linear_scale torque_scale = linear_scale(0, 100, MAX_TORQUE, 0);
+
+//	Set Safety Line High
+	HAL_GPIO_WritePin(SAFETY_CONTROL_GPIO_Port, SAFETY_CONTROL_Pin,
+			GPIO_PIN_SET);
 
 	while (1) {
+// 		Now in "Standby" State
+//		Check if Brake Pressure is high enough
+		bool bp_ok = (can_bus->get_brake_pressure() > 5);
 
+//		Check Start Switch to go Low
+		bool start_ok = (HAL_GPIO_ReadPin(START_GPIO_Port, START_Pin)
+				== GPIO_PIN_RESET);
+
+//		Check Safety Line to go High
+		bool safety_ok = (HAL_GPIO_ReadPin(SAFETY_GPIO_Port, SAFETY_Pin)
+				== GPIO_PIN_SET);
+
+		if (bp_ok && start_ok && safety_ok) {
+//			Now in "RTD Sound" State
+// 			Sound RTD Horn
+			HAL_GPIO_WritePin(RTD_HORN_GPIO_Port, RTD_HORN_Pin, GPIO_PIN_SET);
+			HAL_Delay(2000);
+			HAL_GPIO_WritePin(RTD_HORN_GPIO_Port, RTD_HORN_Pin, GPIO_PIN_RESET);
+
+//			Arm the Inverter!
+			can_bus->arm_inverter();
+
+			while (!stop) {
+				uint16_t torque_command = (uint16_t) torque_scale.int_scale(NU_TALK_VALUE);
+				can_bus->set_torque(torque_command);
+			}
+
+		}
 	}
+}
 
+void emergency_stop() {
+
+	stop = true;
+
+//	Forever Stationary
+	while(1);
 }
 
 void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef *candle) {

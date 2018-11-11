@@ -1,15 +1,3 @@
-// Inverter Settings
-#define MAX_TORQUE 140
-
-// CAN Receive IDs
-#define PEDALBOX_ID 0x3C
-
-// CAN Transmit IDs
-#define INVERTER_ID 0x0C0
-#define PDM_ID 0x28C
-
-// ****** End User Settings ************************************
-
 #include <string>
 
 extern "C" {
@@ -91,6 +79,9 @@ public:
 		HAL_CAN_Receive_IT(&hcan, CAN_FIFO0);
 	}
 
+	uint8_t get_brake_pressure(){
+		return brake_pressure;
+	}
 	uint8_t recievedPedalBox() {
 		return recievedpedalbox;
 	}
