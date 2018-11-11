@@ -1,17 +1,17 @@
 extern "C" {
-#include "main.h"
-#include "stm32f0xx_hal.h"
-#include "can.h"
-#include "adc.h"
-#include "gpio.h"
+	#include "main.h"
+	#include "stm32f0xx_hal.h"
+	#include "can.h"
+	#include "adc.h"
+	#include "gpio.h"
 
-#include <stdio.h>
-int __io_putchar(int ch) {
+	#include <stdio.h>
+	int __io_putchar(int ch) {
 
-//	uint8_t character = (uint8_t) ch;
-//	HAL_UART_Transmit(&huart2, &character, 1, 1000);
-	return ch;
-}
+	//	uint8_t character = (uint8_t) ch;
+	//	HAL_UART_Transmit(&huart2, &character, 1, 1000);
+		return ch;
+	}
 }
 
 #include "Can_Bus.h"
@@ -37,6 +37,14 @@ int main(void) {
 	while (1) {
 
 	}
+
+}
+
+void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef *candle) {
+	HAL_CAN_Receive_IT(candle, CAN_FIFO0);
+
+	Can_Bus *can_bus = can_bus->getInstance();
+	can_bus->rx_update();
 
 }
 
