@@ -2,22 +2,23 @@ extern "C" {
 #include "main.h"
 #include "stm32f0xx_hal.h"
 #include "can.h"
+#include "adc.h"
 #include "gpio.h"
-#include "Can_Bus.h"
-}
 
-void SystemClock_Config(void);
-
-extern "C" {
 #include <stdio.h>
-
 int __io_putchar(int ch) {
 
 //	uint8_t character = (uint8_t) ch;
 //	HAL_UART_Transmit(&huart2, &character, 1, 1000);
-//	return ch;
+	return ch;
 }
 }
+
+#include "Can_Bus.h"
+
+void SystemClock_Config(void);
+
+Can_Bus *Can_Bus::instance = 0;
 
 int main(void) {
 
@@ -28,7 +29,10 @@ int main(void) {
 	MX_GPIO_Init();
 	MX_CAN_Init();
 
-	Can_Bus can_bus = can_bus.Instance();
+	Can_Bus *can_bus = can_bus->getInstance();
+
+	can_bus->arm_inverter();
+	can_bus->set_torque(10);
 
 	while (1) {
 

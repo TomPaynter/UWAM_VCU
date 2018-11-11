@@ -19,13 +19,13 @@ extern "C" {
 }
 
 class Can_Bus {
-public:
-	static Can_Bus* Instance() {
-//		Can Bus Singleton
-		if (!m_pInstance)
-			m_pInstance = new Can_Bus;
+	static Can_Bus* instance;
 
-		return m_pInstance;
+public:
+	static Can_Bus *getInstance() {
+		if (!instance)
+			instance = new Can_Bus;
+		return instance;
 	}
 
 private:
@@ -35,11 +35,10 @@ private:
 	uint8_t torque_request;
 	uint8_t brake_pressure;
 	uint8_t implausibility;
-	Can_Bus* m_pInstance = NULL;
 	uint8_t cooling_state;
 	uint16_t current_torque;
 
-	uint8_t recievedpedalbox = 0;
+	uint8_t recievedpedalbox;
 
 	Can_Bus(void) {
 		torque_request = 0;
@@ -47,6 +46,7 @@ private:
 		implausibility = 0;
 		cooling_state = 0;
 		current_torque = 0;
+		recievedpedalbox = 0;
 	}
 
 	void init(void) {
@@ -76,6 +76,7 @@ private:
 
 	}
 
+public:
 	void rx_update(void) {
 		switch (RxMessage.StdId) {
 		case PEDALBOX_ID:
@@ -95,7 +96,7 @@ private:
 	}
 
 	void clearPedalBox() {
-		recievedPedalBox = 0;
+		recievedpedalbox = 0;
 	}
 
 	void cooling_on() {
@@ -129,7 +130,7 @@ private:
 
 //		Inverter Torque Settings
 		TxMessage.Data[0] = torque_command % 256;
-		TxMessage.Data[1] = torque_command/256;
+		TxMessage.Data[1] = torque_command / 256;
 
 //		Inverter Speed Settings (Unused Set 0)
 		TxMessage.Data[2] = 0;
@@ -170,11 +171,11 @@ private:
 	}
 
 	void rx_print() {
-		printf("Receiving CAN:  ID: %d DLC: %d Data: ", RxMessage.StdId,
-				RxMessage.DLC);
+		printf("Receiving CAN:  ID: %d DLC: %d Data: ", (int) RxMessage.StdId,
+				(int) RxMessage.DLC);
 
-		for (int i = 0; i < RxMessage.DLC; i++)
-			printf("%d ", RxMessage.Data[i]);
+		for (uint8_t i = 0; i < RxMessage.DLC; i++)
+			printf("%d ", (int) RxMessage.Data[i]);
 
 		printf("\n\r");
 
@@ -182,11 +183,11 @@ private:
 
 	void tx_print() {
 
-		printf("\tTransmitting CAN:  ID: %d DLC: %d Data: ", TxMessage.StdId,
-				TxMessage.DLC);
+		printf("\tTransmitting CAN:  ID: %d DLC: %d Data: ",
+				(int) TxMessage.StdId, (int) TxMessage.DLC);
 
-		for (int i = 0; i < TxMessage.DLC; i++)
-			printf("%d ", TxMessage.Data[i]);
+		for (uint8_t i = 0; i < TxMessage.DLC; i++)
+			printf("%d ", (int) TxMessage.Data[i]);
 
 		printf("\n\r");
 	}
