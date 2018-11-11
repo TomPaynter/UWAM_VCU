@@ -51,6 +51,16 @@ float coolant_pressure = 0;
 linear_scale torque_scale = linear_scale(0, 100, MAX_TORQUE, 0);
 thermostat coolant_thermostat = thermostat(THERMOSTAT_ON, THERMOSTAT_OFF);
 
+void emergency_stop() {
+	stop = true;
+	Can_Bus *can_bus = can_bus->getInstance();
+	can_bus->disable_inverter();
+
+//	Forever Stationary
+	while (1)
+		;
+}
+
 int main(void) {
 
 	HAL_Init();
@@ -91,25 +101,25 @@ int main(void) {
 //			Arm the Inverter!
 			can_bus->arm_inverter();
 
-			while (!stop) {
-				if (can_bus->recievedPedalBox()) {
-					can_bus->clearPedalBox();
-					uint16_t torque_command = (uint16_t) torque_scale.int_scale(
-					NU_TALK_VALUE);
-					can_bus->set_torque(torque_command);
-				}
+			while (1) {
+
+				if (!stop) {
+					if (can_bus->recievedPedalBox()) {
+						can_bus->clearPedalBox();
+
+						if(can_bus->get_implausibility_event())
+							emergency_stop();
+
+						uint16_t torque_command =
+								(uint16_t) torque_scale.int_scale(
+										can_bus->get_torque_request());
+						can_bus->set_inverter_torque(torque_command);
+					}
+				} else
+					emergency_stop();
 			}
 		}
 	}
-}
-
-void emergency_stop() {
-
-	stop = true;
-
-//	Forever Stationary
-	while (1)
-		;
 }
 
 void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef *candle) {
@@ -129,7 +139,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 	bool pressure_ok = coolant_pressure > MIN_COOLANT_PRESSURE;
 
 	if (!(pressure_ok && coolant_ok)) {
-		stop = true;
+		emergency_stop();
 	}
 
 	if (coolant_thermostat.checkToggle(coolant_temp)) {

@@ -79,9 +79,18 @@ public:
 		HAL_CAN_Receive_IT(&hcan, CAN_FIFO0);
 	}
 
-	uint8_t get_brake_pressure(){
+	uint8_t get_brake_pressure() {
 		return brake_pressure;
 	}
+
+	uint8_t get_torque_request() {
+		return torque_request;
+	}
+
+	bool get_implausibility_event() {
+		return implausibility == 1;
+	}
+
 	bool recievedPedalBox() {
 		return recievedpedalbox;
 	}
@@ -112,7 +121,7 @@ public:
 		return cooling_state;
 	}
 
-	void set_torque(uint16_t torque_command) {
+	void set_inverter_torque(uint16_t torque_command) {
 		TxMessage.StdId = INVERTER_ID;
 		TxMessage.DLC = 8;
 
@@ -143,6 +152,27 @@ public:
 
 	uint16_t get_current_torque() {
 		return current_torque;
+	}
+
+	void disable_inverter() {
+		TxMessage.StdId = INVERTER_ID;
+		TxMessage.DLC = 8;
+		TxMessage.Data[0] = 0;
+		TxMessage.Data[1] = 0;
+		TxMessage.Data[2] = 0;
+		TxMessage.Data[3] = 0;
+
+//		Motor Direction - Dunno what direction that is, but Luke said so! :p
+		TxMessage.Data[4] = 0xFF;
+
+//		Inverter Run - Dunno what direction that is, but Luke said so! :p
+		TxMessage.Data[5] = 0x40;
+
+		TxMessage.Data[6] = 0;
+		TxMessage.Data[7] = 0;
+
+		HAL_CAN_Transmit_IT(&hcan);
+
 	}
 
 	void arm_inverter() {

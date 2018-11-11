@@ -15,14 +15,10 @@ public:
 		if (value >= _turn_on) {
 			status = true;
 			return true;
-		}
-
-		else if (value <= _turn_off) {
+		} else if (value <= _turn_off) {
 			status = false;
 			return false;
-		}
-
-		else {
+		} else {
 			return status;
 		}
 	}
@@ -37,9 +33,7 @@ public:
 		if (status_old != status) {
 			status_old = status;
 			return true;
-		}
-
-		else
+		} else
 			return false;
 	}
 
