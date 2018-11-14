@@ -25,7 +25,9 @@ extern "C" {
 #include "main.h"
 #include "stm32f0xx_hal.h"
 #include "can.h"
-//#include "adc.h"
+#include "adc.h"
+#include "dma.h"
+#include "tim.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -51,6 +53,8 @@ float coolant_pressure = 0;
 linear_scale torque_scale = linear_scale(0, 100, MAX_TORQUE, 0);
 thermostat coolant_thermostat = thermostat(THERMOSTAT_ON, THERMOSTAT_OFF);
 
+uint32_t ADC_RAW[13] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3 };
+
 void emergency_stop() {
 	stop = true;
 	Can_Bus *can_bus = can_bus->getInstance();
@@ -61,6 +65,7 @@ void emergency_stop() {
 		;
 }
 
+
 int main(void) {
 
 	HAL_Init();
@@ -69,6 +74,9 @@ int main(void) {
 
 	MX_GPIO_Init();
 	MX_CAN_Init();
+	MX_ADC_Init();
+	HAL_ADCEx_Calibration_Start (&hadc);
+	HAL_TIM_Base_Start_IT (&htim3);
 
 	Can_Bus *can_bus = can_bus->getInstance();
 
@@ -107,7 +115,7 @@ int main(void) {
 					if (can_bus->recievedPedalBox()) {
 						can_bus->clearPedalBox();
 
-						if(can_bus->get_implausibility_event())
+						if (can_bus->get_implausibility_event())
 							emergency_stop();
 
 						uint16_t torque_command =
@@ -133,6 +141,7 @@ void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef *candle) {
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 	Can_Bus *can_bus = can_bus->getInstance();
 
+
 //	Yea, do some fancy calibrations and shit here
 
 	bool coolant_ok = coolant_temp < MAX_COOLANT_TEMP;
@@ -148,6 +157,17 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 		else
 			can_bus->cooling_off();
 	}
+}
+
+//void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
+//
+// c=c+1;
+//}
+
+void HAL_TIM_PeriodElapsedCallback (TIM_HandleTypeDef *htim) {
+//	b = b+1;
+	HAL_ADC_Start_DMA(&hadc, ADC_RAW, 10);
+
 }
 
 void SystemClock_Config(void) {
