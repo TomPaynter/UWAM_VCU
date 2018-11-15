@@ -24,9 +24,9 @@
 extern "C" {
 #include "main.h"
 #include "stm32f0xx_hal.h"
-#include "dma.h"
-#include "can.h"
 #include "adc.h"
+#include "can.h"
+#include "dma.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
@@ -53,7 +53,7 @@ uint32_t coolant_pressure = 0;
 linear_scale torque_scale = linear_scale(0, 100, MAX_TORQUE, 0);
 thermostat coolant_thermostat = thermostat(THERMOSTAT_ON, THERMOSTAT_OFF);
 
-uint32_t ADC_RAW[2] = { 1, 2};
+uint32_t ADC_RAW[2] = { 1, 2 };
 
 void emergency_stop() {
 	stop = true;
@@ -70,14 +70,15 @@ int main(void) {
 	HAL_Init();
 
 	SystemClock_Config();
-
-	MX_DMA_Init();
 	MX_GPIO_Init();
+	MX_DMA_Init();
 	MX_CAN_Init();
-	MX_ADC_Init();
+	MX_USART1_UART_Init();
 	MX_TIM3_Init();
+	MX_ADC_Init();
 
 	HAL_ADCEx_Calibration_Start(&hadc);
+	HAL_ADC_Start_DMA(&hadc, ADC_RAW, 2);
 	HAL_TIM_Base_Start_IT(&htim3);
 
 	Can_Bus *can_bus = can_bus->getInstance();
@@ -95,12 +96,13 @@ int main(void) {
 	HAL_GPIO_WritePin(SAFETY_CONTROL_GPIO_Port, SAFETY_CONTROL_Pin,
 			GPIO_PIN_SET);
 
-//	HAL_ADC_Start(&hadc);
-
 	while (1) {
 // 		Now in "Standby" State
 //		Check if Brake Pressure is high enough
 		bp_ok = (can_bus->get_brake_pressure() > 5);
+
+//		DEBUG TEST!!!!!!
+		bp_ok = true;
 
 //		Check Start Switch to go Low
 		start_ok = (HAL_GPIO_ReadPin(START_GPIO_Port, START_Pin)
@@ -112,16 +114,9 @@ int main(void) {
 
 		coolant_ok = coolant_temp < MAX_COOLANT_TEMP;
 
-		HAL_ADC_Start_DMA(&hadc, ADC_RAW, 2);
-
-//		HAL_ADC_Start_IT(&hadc);
-
 		if (bp_ok && start_ok && safety_ok && coolant_ok) {
 //			Now in "RTD Sound" State
 // 			Sound RTD Horn
-
-//			HAL_ADC_Start_DMA(&hadc, ADC_RAW, 10);
-
 
 			HAL_GPIO_WritePin(RTD_HORN_GPIO_Port, RTD_HORN_Pin, GPIO_PIN_SET);
 			HAL_Delay(2000);
@@ -180,20 +175,12 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 //			can_bus->cooling_off();
 //	}
 
-
 }
 
-//void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
-//
-// c=c+1;
-//}
-
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
-//	b = b+1;
-//	HAL_ADC_Start_DMA(&hadc, ADC_RAW, 10);
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
+	HAL_ADC_Start_DMA(&hadc, ADC_RAW, 2);
 
 }
-
 void SystemClock_Config(void) {
 
 	RCC_OscInitTypeDef RCC_OscInitStruct;
