@@ -9,12 +9,12 @@
 #define PDM_ID 0x28C
 
 // Coolant Temp
-#define MAX_COOLANT_TEMP 60
+#define MAX_COOLANT_TEMP 4000
 #define THERMOSTAT_ON 30
 #define THERMOSTAT_OFF 25
 
 //Min Coolant Pressure
-#define MIN_COOLANT_PRESSURE 5
+#define MIN_COOLANT_PRESSURE 2000
 
 // NU_TALK_VALUE - debug please not to be released if present
 #define NU_TALK_VALUE 0
@@ -24,9 +24,9 @@
 extern "C" {
 #include "main.h"
 #include "stm32f0xx_hal.h"
+#include "dma.h"
 #include "can.h"
 #include "adc.h"
-#include "dma.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
@@ -47,13 +47,13 @@ void SystemClock_Config(void);
 
 Can_Bus *Can_Bus::instance = 0;
 bool stop = false;
-float coolant_temp = 0;
-float coolant_pressure = 0;
+uint32_t coolant_temp = 0;
+uint32_t coolant_pressure = 0;
 
 linear_scale torque_scale = linear_scale(0, 100, MAX_TORQUE, 0);
 thermostat coolant_thermostat = thermostat(THERMOSTAT_ON, THERMOSTAT_OFF);
 
-uint32_t ADC_RAW[13] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3 };
+uint32_t ADC_RAW[2] = { 1, 2};
 
 void emergency_stop() {
 	stop = true;
@@ -65,43 +65,64 @@ void emergency_stop() {
 		;
 }
 
-
 int main(void) {
 
 	HAL_Init();
 
 	SystemClock_Config();
 
+	MX_DMA_Init();
 	MX_GPIO_Init();
 	MX_CAN_Init();
 	MX_ADC_Init();
-	HAL_ADCEx_Calibration_Start (&hadc);
-	HAL_TIM_Base_Start_IT (&htim3);
+	MX_TIM3_Init();
+
+	HAL_ADCEx_Calibration_Start(&hadc);
+	HAL_TIM_Base_Start_IT(&htim3);
 
 	Can_Bus *can_bus = can_bus->getInstance();
+
+	volatile uint8_t coolant_ok = 0;
+	volatile uint8_t bp_ok = 0;
+	volatile uint8_t start_ok = 0;
+	volatile uint8_t safety_ok = 0;
+
+	HAL_GPIO_WritePin(RTD_HORN_GPIO_Port, RTD_HORN_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(SAFETY_CONTROL_GPIO_Port, SAFETY_CONTROL_Pin,
+			GPIO_PIN_RESET);
 
 //	Set Safety Line High
 	HAL_GPIO_WritePin(SAFETY_CONTROL_GPIO_Port, SAFETY_CONTROL_Pin,
 			GPIO_PIN_SET);
 
+//	HAL_ADC_Start(&hadc);
+
 	while (1) {
 // 		Now in "Standby" State
 //		Check if Brake Pressure is high enough
-		bool bp_ok = (can_bus->get_brake_pressure() > 5);
+		bp_ok = (can_bus->get_brake_pressure() > 5);
 
 //		Check Start Switch to go Low
-		bool start_ok = (HAL_GPIO_ReadPin(START_GPIO_Port, START_Pin)
+		start_ok = (HAL_GPIO_ReadPin(START_GPIO_Port, START_Pin)
 				== GPIO_PIN_RESET);
 
 //		Check Safety Line to go High
-		bool safety_ok = (HAL_GPIO_ReadPin(SAFETY_GPIO_Port, SAFETY_Pin)
+		safety_ok = (HAL_GPIO_ReadPin(SAFETY_GPIO_Port, SAFETY_Pin)
 				== GPIO_PIN_SET);
 
-		bool coolant_ok = coolant_temp < MAX_COOLANT_TEMP;
+		coolant_ok = coolant_temp < MAX_COOLANT_TEMP;
+
+		HAL_ADC_Start_DMA(&hadc, ADC_RAW, 2);
+
+//		HAL_ADC_Start_IT(&hadc);
 
 		if (bp_ok && start_ok && safety_ok && coolant_ok) {
 //			Now in "RTD Sound" State
 // 			Sound RTD Horn
+
+//			HAL_ADC_Start_DMA(&hadc, ADC_RAW, 10);
+
+
 			HAL_GPIO_WritePin(RTD_HORN_GPIO_Port, RTD_HORN_Pin, GPIO_PIN_SET);
 			HAL_Delay(2000);
 			HAL_GPIO_WritePin(RTD_HORN_GPIO_Port, RTD_HORN_Pin, GPIO_PIN_RESET);
@@ -140,23 +161,26 @@ void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef *candle) {
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 	Can_Bus *can_bus = can_bus->getInstance();
-
-
 //	Yea, do some fancy calibrations and shit here
 
-	bool coolant_ok = coolant_temp < MAX_COOLANT_TEMP;
-	bool pressure_ok = coolant_pressure > MIN_COOLANT_PRESSURE;
+	coolant_pressure = ADC_RAW[0];
+	coolant_temp = ADC_RAW[1];
 
-	if (!(pressure_ok && coolant_ok)) {
-		emergency_stop();
-	}
+//	bool coolant_ok = coolant_temp < MAX_COOLANT_TEMP;
+//	bool pressure_ok = coolant_pressure > MIN_COOLANT_PRESSURE;
+//
+//	if (!(pressure_ok && coolant_ok)) {
+//		emergency_stop();
+//	}
+//
+//	if (coolant_thermostat.checkToggle(coolant_temp)) {
+//		if (coolant_thermostat.getStatus())
+//			can_bus->cooling_on();
+//		else
+//			can_bus->cooling_off();
+//	}
 
-	if (coolant_thermostat.checkToggle(coolant_temp)) {
-		if (coolant_thermostat.getStatus())
-			can_bus->cooling_on();
-		else
-			can_bus->cooling_off();
-	}
+
 }
 
 //void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
@@ -164,9 +188,9 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 // c=c+1;
 //}
 
-void HAL_TIM_PeriodElapsedCallback (TIM_HandleTypeDef *htim) {
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 //	b = b+1;
-	HAL_ADC_Start_DMA(&hadc, ADC_RAW, 10);
+//	HAL_ADC_Start_DMA(&hadc, ADC_RAW, 10);
 
 }
 
