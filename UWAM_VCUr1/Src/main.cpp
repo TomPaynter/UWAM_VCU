@@ -42,16 +42,19 @@ int __io_putchar(int ch) {
 #include "Can_Bus.h"
 #include "linear_scale.h"
 #include "thermostat.h"
+#include "sensors/bosch_NTC_M12/bosch_NTC_M12.h"
+#include "sensors/variohm_EPT2100/variohm_EPT2100.h"
 
 void SystemClock_Config(void);
 
 Can_Bus *Can_Bus::instance = 0;
 bool stop = false;
-uint32_t coolant_temp = 0;
-uint32_t coolant_pressure = 0;
 
 linear_scale torque_scale = linear_scale(0, 100, MAX_TORQUE, 0);
 thermostat coolant_thermostat = thermostat(THERMOSTAT_ON, THERMOSTAT_OFF);
+
+bosch_NTC_M12 coolant_temp(10e3);
+variohm_EPT2100 coolant_pressure;
 
 uint32_t ADC_RAW[2] = { 1, 2 };
 
@@ -112,7 +115,7 @@ int main(void) {
 		safety_ok = (HAL_GPIO_ReadPin(SAFETY_GPIO_Port, SAFETY_Pin)
 				== GPIO_PIN_SET);
 
-		coolant_ok = coolant_temp < MAX_COOLANT_TEMP;
+		coolant_ok = coolant_temp.getTemp() < MAX_COOLANT_TEMP;
 
 		if (bp_ok && start_ok && safety_ok && coolant_ok) {
 //			Now in "RTD Sound" State
@@ -158,17 +161,19 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 	Can_Bus *can_bus = can_bus->getInstance();
 //	Yea, do some fancy calibrations and shit here
 
-	coolant_pressure = ADC_RAW[0];
-	coolant_temp = ADC_RAW[1];
+	float adc0voltage = ADC_RAW[0]/4096 * 3.3;
 
-//	bool coolant_ok = coolant_temp < MAX_COOLANT_TEMP;
-//	bool pressure_ok = coolant_pressure > MIN_COOLANT_PRESSURE;
+	coolant_pressure.calcPressure(adc0voltage);
+	coolant_temp.calcTemp(ADC_RAW[1]);
+//
+//	bool coolant_ok = coolant_temp.getTemp() < MAX_COOLANT_TEMP;
+//	bool pressure_ok = coolant_pressure.getPressure() > MIN_COOLANT_PRESSURE;
 //
 //	if (!(pressure_ok && coolant_ok)) {
 //		emergency_stop();
 //	}
 //
-//	if (coolant_thermostat.checkToggle(coolant_temp)) {
+//	if (coolant_thermostat.checkToggle(coolant_temp.getTemp())) {
 //		if (coolant_thermostat.getStatus())
 //			can_bus->cooling_on();
 //		else

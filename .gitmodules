@@ -1,0 +1,3 @@
+[submodule "UWAM_VCUr1/Inc/WAL_Libraries"]
+	path = UWAM_VCUr1/Inc/WAL_Libraries
+	url = https://github.com/TomPaynter/WAL_Libraries.git
