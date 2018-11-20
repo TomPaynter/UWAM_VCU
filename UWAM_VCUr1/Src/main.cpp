@@ -56,7 +56,7 @@ thermostat coolant_thermostat = thermostat(THERMOSTAT_ON, THERMOSTAT_OFF);
 bosch_NTC_M12 coolant_temp(10e3);
 variohm_EPT2100 coolant_pressure;
 
-uint32_t ADC_RAW[2] = { 1, 2 };
+uint32_t ADC_RAW[200];
 
 void emergency_stop() {
 	stop = true;
@@ -74,15 +74,14 @@ int main(void) {
 
 	SystemClock_Config();
 	MX_GPIO_Init();
+	MX_TIM3_Init();
 	MX_DMA_Init();
 	MX_CAN_Init();
 	MX_USART1_UART_Init();
-	MX_TIM3_Init();
 	MX_ADC_Init();
 
 	HAL_ADCEx_Calibration_Start(&hadc);
-	HAL_ADC_Start_DMA(&hadc, ADC_RAW, 2);
-	HAL_TIM_Base_Start_IT(&htim3);
+
 
 	Can_Bus *can_bus = can_bus->getInstance();
 
@@ -98,6 +97,13 @@ int main(void) {
 //	Set Safety Line High
 	HAL_GPIO_WritePin(SAFETY_CONTROL_GPIO_Port, SAFETY_CONTROL_Pin,
 			GPIO_PIN_SET);
+
+	for(int i = 0; i < 200; i++)
+		ADC_RAW[i] = i;
+
+//	HAL_ADC_Start_DMA(&hadc, ADC_RAW, 2);
+	HAL_TIM_Base_Start_IT(&htim3);
+	HAL_ADC_Start_DMA(&hadc, ADC_RAW, 200);
 
 	while (1) {
 // 		Now in "Standby" State
@@ -183,7 +189,6 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
-	HAL_ADC_Start_DMA(&hadc, ADC_RAW, 2);
 
 }
 void SystemClock_Config(void) {
