@@ -56,6 +56,12 @@ thermostat coolant_thermostat = thermostat(THERMOSTAT_ON, THERMOSTAT_OFF);
 bosch_NTC_M12 coolant_temp(10e3);
 variohm_EPT2100 coolant_pressure;
 
+volatile uint8_t coolant_ok = 0;
+volatile uint8_t pressure_ok = 0;
+volatile uint8_t bp_ok = 0;
+volatile uint8_t start_ok = 0;
+volatile uint8_t safety_ok = 0;
+
 uint32_t ADC_RAW[200];
 
 void emergency_stop() {
@@ -83,11 +89,6 @@ int main(void) {
 	HAL_ADCEx_Calibration_Start(&hadc);
 
 	Can_Bus *can_bus = can_bus->getInstance();
-
-	volatile uint8_t coolant_ok = 0;
-	volatile uint8_t bp_ok = 0;
-	volatile uint8_t start_ok = 0;
-	volatile uint8_t safety_ok = 0;
 
 	HAL_GPIO_WritePin(RTD_HORN_GPIO_Port, RTD_HORN_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(SAFETY_CONTROL_GPIO_Port, SAFETY_CONTROL_Pin,
@@ -162,41 +163,43 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 	float adc0raw = 0;
 	float adc1raw = 0;
 
-	for(int i = 0; i < 200; i = i + 2)
+	for (int i = 0; i < 200; i = i + 2)
 		adc0raw = adc0raw + ADC_RAW[i];
 
-	for(int i = 1; i < 200; i = i + 2)
+	for (int i = 1; i < 200; i = i + 2)
 		adc1raw = adc1raw + ADC_RAW[i];
 
 	adc0raw = adc0raw / 100;
 	adc1raw = adc1raw / 100;
-
-
-	coolant_pressure.calcPressure(adc0raw / 4096 * 3.3);
-	coolant_temp.calcTemp(adc1raw);
-
-	//	bool coolant_ok = coolant_temp.getTemp() < MAX_COOLANT_TEMP;
-	//	bool pressure_ok = coolant_pressure.getPressure() > MIN_COOLANT_PRESSURE;
-	//
-	//	if (!(pressure_ok && coolant_ok)) {
-	//		emergency_stop();
-	//	}
-	//
-	//	if (coolant_thermostat.checkToggle(coolant_temp.getTemp())) {
-	//		if (coolant_thermostat.getStatus())
-	//			can_bus->cooling_on();
-	//		else
-	//			can_bus->cooling_off();
-	//	}
+//
+//	//	Yea, do some fancy calibrations and shit for the adc to pressure here
+//	coolant_pressure.calcPressure(adc0raw / 4096 * 3.3);
+//
+//	coolant_temp.calcTemp(adc1raw);
+//	Can_Bus *can_bus = can_bus->getInstance();
+//
+//	coolant_ok = coolant_temp.getTemp() < MAX_COOLANT_TEMP;
+//	pressure_ok = coolant_pressure.getPressure() > MIN_COOLANT_PRESSURE;
+//
+//	if (!(pressure_ok && coolant_ok)) {
+//		emergency_stop();
+//	}
+//
+//	if (coolant_thermostat.checkToggle(coolant_temp.getTemp())) {
+//		if (coolant_thermostat.getStatus())
+//			can_bus->cooling_on();
+//		else
+//			can_bus->cooling_off();
+//	}
 
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
-	//	Yea, do some fancy calibrations and shit here
 //	Can_Bus *can_bus = can_bus->getInstance();
 
 //	Transmit Cooling info on can bus
-
+//	can_bus->transmit_vcu_data(coolant_pressure.getPressure(),
+//			coolant_temp.getTemp(), bp_ok, start_ok, safety_ok);
 
 }
 void SystemClock_Config(void) {

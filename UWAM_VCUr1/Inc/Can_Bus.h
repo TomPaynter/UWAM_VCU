@@ -1,6 +1,7 @@
 #include <string>
 
 extern "C" {
+#include "main.h"
 #include "stm32f0xx_hal.h"
 #include "can.h"
 #include "gpio.h"
@@ -186,6 +187,28 @@ public:
 		TxMessage.Data[5] = 0;
 		TxMessage.Data[6] = 0;
 		TxMessage.Data[7] = 0;
+
+		HAL_CAN_Transmit_IT(&hcan);
+
+	}
+
+	void transmit_vcu_data(float pressure, float temperature, bool bp_ok, bool start_ok, bool safety_ok) {
+
+		uint16_t int_pressure = (uint16_t) pressure;
+		uint16_t int_temperature = (uint16_t) temperature;
+
+		int_pressure = int_pressure * 10;
+		int_temperature = (int_temperature + 50) * 10;
+
+		TxMessage.StdId = INVERTER_ID;
+		TxMessage.DLC = 7;
+		TxMessage.Data[0] = int_pressure % 256;
+		TxMessage.Data[1] = int_pressure /256;
+		TxMessage.Data[2] = int_temperature % 256;
+		TxMessage.Data[3] = int_temperature / 256;
+		TxMessage.Data[4] = bp_ok;
+		TxMessage.Data[5] = start_ok;
+		TxMessage.Data[6] = safety_ok;
 
 		HAL_CAN_Transmit_IT(&hcan);
 
