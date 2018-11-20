@@ -82,7 +82,6 @@ int main(void) {
 
 	HAL_ADCEx_Calibration_Start(&hadc);
 
-
 	Can_Bus *can_bus = can_bus->getInstance();
 
 	volatile uint8_t coolant_ok = 0;
@@ -98,10 +97,6 @@ int main(void) {
 	HAL_GPIO_WritePin(SAFETY_CONTROL_GPIO_Port, SAFETY_CONTROL_Pin,
 			GPIO_PIN_SET);
 
-	for(int i = 0; i < 200; i++)
-		ADC_RAW[i] = i;
-
-//	HAL_ADC_Start_DMA(&hadc, ADC_RAW, 2);
 	HAL_TIM_Base_Start_IT(&htim3);
 	HAL_ADC_Start_DMA(&hadc, ADC_RAW, 200);
 
@@ -164,31 +159,44 @@ void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef *candle) {
 }
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
-	Can_Bus *can_bus = can_bus->getInstance();
-//	Yea, do some fancy calibrations and shit here
+	float adc0raw = 0;
+	float adc1raw = 0;
 
-	float adc0voltage = ADC_RAW[0]/4096 * 3.3;
+	for(int i = 0; i < 200; i = i + 2)
+		adc0raw = adc0raw + ADC_RAW[i];
 
-	coolant_pressure.calcPressure(adc0voltage);
-	coolant_temp.calcTemp(ADC_RAW[1]);
-//
-//	bool coolant_ok = coolant_temp.getTemp() < MAX_COOLANT_TEMP;
-//	bool pressure_ok = coolant_pressure.getPressure() > MIN_COOLANT_PRESSURE;
-//
-//	if (!(pressure_ok && coolant_ok)) {
-//		emergency_stop();
-//	}
-//
-//	if (coolant_thermostat.checkToggle(coolant_temp.getTemp())) {
-//		if (coolant_thermostat.getStatus())
-//			can_bus->cooling_on();
-//		else
-//			can_bus->cooling_off();
-//	}
+	for(int i = 1; i < 200; i = i + 2)
+		adc1raw = adc1raw + ADC_RAW[i];
+
+	adc0raw = adc0raw / 100;
+	adc1raw = adc1raw / 100;
+
+
+	coolant_pressure.calcPressure(adc0raw / 4096 * 3.3);
+	coolant_temp.calcTemp(adc1raw);
+
+	//	bool coolant_ok = coolant_temp.getTemp() < MAX_COOLANT_TEMP;
+	//	bool pressure_ok = coolant_pressure.getPressure() > MIN_COOLANT_PRESSURE;
+	//
+	//	if (!(pressure_ok && coolant_ok)) {
+	//		emergency_stop();
+	//	}
+	//
+	//	if (coolant_thermostat.checkToggle(coolant_temp.getTemp())) {
+	//		if (coolant_thermostat.getStatus())
+	//			can_bus->cooling_on();
+	//		else
+	//			can_bus->cooling_off();
+	//	}
 
 }
 
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+	//	Yea, do some fancy calibrations and shit here
+//	Can_Bus *can_bus = can_bus->getInstance();
+
+//	Transmit Cooling info on can bus
+
 
 }
 void SystemClock_Config(void) {
