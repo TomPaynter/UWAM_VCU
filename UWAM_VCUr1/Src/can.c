@@ -40,8 +40,6 @@
 /* Includes ------------------------------------------------------------------*/
 #include "can.h"
 
-#include "gpio.h"
-
 /* USER CODE BEGIN 0 */
 
 /* USER CODE END 0 */
@@ -56,8 +54,8 @@ void MX_CAN_Init(void)
   hcan.Init.Prescaler = 3;
   hcan.Init.Mode = CAN_MODE_NORMAL;
   hcan.Init.SJW = CAN_SJW_4TQ;
-  hcan.Init.BS1 = CAN_BS1_10TQ;
-  hcan.Init.BS2 = CAN_BS2_5TQ;
+  hcan.Init.BS1 = CAN_BS1_13TQ;
+  hcan.Init.BS2 = CAN_BS2_2TQ;
   hcan.Init.TTCM = DISABLE;
   hcan.Init.ABOM = DISABLE;
   hcan.Init.AWUM = DISABLE;
@@ -66,7 +64,7 @@ void MX_CAN_Init(void)
   hcan.Init.TXFP = DISABLE;
   if (HAL_CAN_Init(&hcan) != HAL_OK)
   {
-    _Error_Handler(__FILE__, __LINE__);
+    Error_Handler();
   }
 
 }
@@ -74,7 +72,7 @@ void MX_CAN_Init(void)
 void HAL_CAN_MspInit(CAN_HandleTypeDef* canHandle)
 {
 
-  GPIO_InitTypeDef GPIO_InitStruct;
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
   if(canHandle->Instance==CAN)
   {
   /* USER CODE BEGIN CAN_MspInit 0 */
@@ -83,6 +81,7 @@ void HAL_CAN_MspInit(CAN_HandleTypeDef* canHandle)
     /* CAN clock enable */
     __HAL_RCC_CAN1_CLK_ENABLE();
   
+    __HAL_RCC_GPIOA_CLK_ENABLE();
     /**CAN GPIO Configuration    
     PA11     ------> CAN_RX
     PA12     ------> CAN_TX 
@@ -131,13 +130,5 @@ void HAL_CAN_MspDeInit(CAN_HandleTypeDef* canHandle)
 /* USER CODE BEGIN 1 */
 
 /* USER CODE END 1 */
-
-/**
-  * @}
-  */
-
-/**
-  * @}
-  */
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
