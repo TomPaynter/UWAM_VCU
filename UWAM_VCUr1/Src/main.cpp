@@ -9,17 +9,6 @@
 #define PDM_ID 0x28C
 #define VCU_ID 0x320
 
-// Coolant Temp
-#define MAX_COOLANT_TEMP 4000
-#define THERMOSTAT_ON 30
-#define THERMOSTAT_OFF 25
-
-//Min Coolant Pressure
-#define MIN_COOLANT_PRESSURE 2000
-
-// NU_TALK_VALUE - debug please not to be released if present
-#define NU_TALK_VALUE 0
-
 // ****** End User Settings ************************************
 
 extern "C" {
@@ -50,6 +39,8 @@ void SystemClock_Config(void);
 void _Error_Handler(char *file, int line);
 
 Can_Bus *Can_Bus::instance = 0;
+
+linear_scale torque_scale = linear_scale(0, 100, MAX_TORQUE, 0);
 
 volatile uint8_t bp_ok = 0;
 volatile uint8_t start_ok = 0;
@@ -92,14 +83,8 @@ int main(void) {
 //		Check if Brake Pressure is high enough
 		bp_ok = (can_bus->get_brake_pressure() > 5);
 
-//		DEBUG TEST!!!!!!
-		bp_ok = true;
-
 //		Check if Inverter is happy
 		inverter_happy = !(can_bus->get_inverter_fault());
-
-//		DEBUG TEST!!!!!!
-		inverter_happy = true;
 
 //		Check Start Switch to go Low
 		start_ok = (HAL_GPIO_ReadPin(START_GPIO_Port, START_Pin)
@@ -150,11 +135,11 @@ void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef *candle) {
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
-//	Can_Bus *can_bus = can_bus->getInstance();
+	Can_Bus *can_bus = can_bus->getInstance();
 
-//	Transmit Cooling info on can bus
-//	can_bus->transmit_vcu_data(can_bus->get_inverter_fault,
-//			coolant_temp.getTemp(), bp_ok, start_ok, safety_ok);
+//	Transmit VCU info on can bus
+	can_bus->transmit_vcu_data(state, bp_ok, start_ok, safety_ok,
+			inverter_happy);
 
 }
 
@@ -187,7 +172,7 @@ void emergency_stop() {
 	Can_Bus *can_bus = can_bus->getInstance();
 	can_bus->disable_inverter();
 
-	//	Set Safety Line Low
+//	Set Safety Line Low
 	HAL_GPIO_WritePin(SAFETY_CONTROL_GPIO_Port, SAFETY_CONTROL_Pin,
 			GPIO_PIN_RESET);
 
