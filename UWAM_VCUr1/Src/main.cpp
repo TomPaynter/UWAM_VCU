@@ -3,10 +3,11 @@
 
 // CAN Receive IDs
 #define PEDALBOX_ID 0x3C
-
+#define INVERTER_FAUL_ID 0x0AB
 // CAN Transmit IDs
 #define INVERTER_ID 0x0C0
 #define PDM_ID 0x28C
+#define VCU_ID 0x320
 
 // Coolant Temp
 #define MAX_COOLANT_TEMP 4000
@@ -49,32 +50,17 @@ void SystemClock_Config(void);
 void _Error_Handler(char *file, int line);
 
 Can_Bus *Can_Bus::instance = 0;
-bool stop = false;
 
-linear_scale torque_scale = linear_scale(0, 100, MAX_TORQUE, 0);
-thermostat coolant_thermostat = thermostat(THERMOSTAT_ON, THERMOSTAT_OFF);
-
-bosch_NTC_M12 coolant_temp(10e3);
-variohm_EPT2100 coolant_pressure;
-
-volatile uint8_t coolant_ok = 0;
-volatile uint8_t pressure_ok = 0;
 volatile uint8_t bp_ok = 0;
 volatile uint8_t start_ok = 0;
 volatile uint8_t safety_ok = 0;
+volatile uint8_t inverter_happy = 0;
+
+volatile uint8_t state = 0;
 
 uint32_t ADC_RAW[200];
 
-void emergency_stop() {
-	stop = true;
-	Can_Bus *can_bus = can_bus->getInstance();
-	can_bus->disable_inverter();
-
-//	Forever Stationary
-	while (1)
-		;
-}
-
+void emergency_stop(void);
 void RTD_Sound(void);
 
 int main(void) {
@@ -87,9 +73,6 @@ int main(void) {
 	MX_DMA_Init();
 	MX_CAN_Init();
 	MX_USART1_UART_Init();
-	MX_ADC_Init();
-
-	HAL_ADCEx_Calibration_Start(&hadc);
 
 	Can_Bus *can_bus = can_bus->getInstance();
 
@@ -101,15 +84,22 @@ int main(void) {
 			GPIO_PIN_SET);
 
 	HAL_TIM_Base_Start_IT(&htim3);
-	HAL_ADC_Start_DMA(&hadc, ADC_RAW, 200);
 
 	while (1) {
 // 		Now in "Standby" State
+		state = 1;
+
 //		Check if Brake Pressure is high enough
 		bp_ok = (can_bus->get_brake_pressure() > 5);
 
 //		DEBUG TEST!!!!!!
 		bp_ok = true;
+
+//		Check if Inverter is happy
+		inverter_happy = !(can_bus->get_inverter_fault());
+
+//		DEBUG TEST!!!!!!
+		inverter_happy = true;
 
 //		Check Start Switch to go Low
 		start_ok = (HAL_GPIO_ReadPin(START_GPIO_Port, START_Pin)
@@ -119,10 +109,10 @@ int main(void) {
 		safety_ok = (HAL_GPIO_ReadPin(SAFETY_GPIO_Port, SAFETY_Pin)
 				== GPIO_PIN_SET);
 
-		coolant_ok = coolant_temp.getTemp() < MAX_COOLANT_TEMP;
-
-		if (bp_ok && start_ok && safety_ok && coolant_ok) {
+		if (bp_ok && start_ok && safety_ok && inverter_happy) {
 //			Now in "RTD Sound" State
+			state = 2;
+
 // 			Sound RTD Horn
 			RTD_Sound();
 
@@ -130,21 +120,23 @@ int main(void) {
 			can_bus->arm_inverter();
 
 			while (1) {
+//				Now in "Drive" State
+				state = 3;
 
-				if (!stop) {
-					if (can_bus->recievedPedalBox()) {
-						can_bus->clearPedalBox();
+				if (can_bus->recievedPedalBox()) {
+					can_bus->clearPedalBox();
 
-						if (can_bus->get_implausibility_event())
-							emergency_stop();
+					if (can_bus->get_implausibility_event())
+						emergency_stop();
 
-						uint16_t torque_command =
-								(uint16_t) torque_scale.int_scale(
-										can_bus->get_torque_request());
-						can_bus->set_inverter_torque(torque_command);
-					}
-				} else
-					emergency_stop();
+					if (can_bus->get_inverter_fault())
+						emergency_stop();
+
+					uint16_t torque_command = (uint16_t) torque_scale.int_scale(
+							can_bus->get_torque_request());
+					can_bus->set_inverter_torque(torque_command);
+				}
+
 			}
 		}
 	}
@@ -155,49 +147,13 @@ void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef *candle) {
 
 	Can_Bus *can_bus = can_bus->getInstance();
 	can_bus->rx_update();
-
-}
-
-void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
-	float adc0raw = 0;
-	float adc1raw = 0;
-
-	for (int i = 0; i < 200; i = i + 2)
-		adc0raw = adc0raw + ADC_RAW[i];
-
-	for (int i = 1; i < 200; i = i + 2)
-		adc1raw = adc1raw + ADC_RAW[i];
-
-	adc0raw = adc0raw / 100;
-	adc1raw = adc1raw / 100;
-//
-//	//	Yea, do some fancy calibrations and shit for the adc to pressure here
-//	coolant_pressure.calcPressure(adc0raw / 4096 * 3.3);
-//
-//	coolant_temp.calcTemp(adc1raw);
-//	Can_Bus *can_bus = can_bus->getInstance();
-//
-//	coolant_ok = coolant_temp.getTemp() < MAX_COOLANT_TEMP;
-//	pressure_ok = coolant_pressure.getPressure() > MIN_COOLANT_PRESSURE;
-//
-//	if (!(pressure_ok && coolant_ok)) {
-//		emergency_stop();
-//	}
-//
-//	if (coolant_thermostat.checkToggle(coolant_temp.getTemp())) {
-//		if (coolant_thermostat.getStatus())
-//			can_bus->cooling_on();
-//		else
-//			can_bus->cooling_off();
-//	}
-
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 //	Can_Bus *can_bus = can_bus->getInstance();
 
 //	Transmit Cooling info on can bus
-//	can_bus->transmit_vcu_data(coolant_pressure.getPressure(),
+//	can_bus->transmit_vcu_data(can_bus->get_inverter_fault,
 //			coolant_temp.getTemp(), bp_ok, start_ok, safety_ok);
 
 }
@@ -222,6 +178,22 @@ void RTD_Sound(void) {
 	GPIO_InitStruct.Pull = GPIO_NOPULL;
 	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
 	HAL_GPIO_Init(RTD_HORN_GPIO_Port, &GPIO_InitStruct);
+}
+
+void emergency_stop() {
+//	Now in "Stop" State
+	state = 4;
+
+	Can_Bus *can_bus = can_bus->getInstance();
+	can_bus->disable_inverter();
+
+	//	Set Safety Line Low
+	HAL_GPIO_WritePin(SAFETY_CONTROL_GPIO_Port, SAFETY_CONTROL_Pin,
+			GPIO_PIN_RESET);
+
+//	Forever Stationary
+	while (1)
+		;
 }
 
 void SystemClock_Config(void) {

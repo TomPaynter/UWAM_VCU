@@ -28,6 +28,7 @@ private:
 	uint16_t current_torque;
 
 	bool recievedpedalbox;
+	bool inverter_fault;
 
 	Can_Bus(void) {
 		torque_request = 0;
@@ -36,6 +37,7 @@ private:
 		cooling_state = 0;
 		current_torque = 0;
 		recievedpedalbox = 0;
+		inverter_fault = true;
 	}
 
 	void init(void) {
@@ -76,10 +78,30 @@ public:
 			recievedpedalbox = 1;
 			break;
 
+		case INVERTER_FAUL_ID:
+			bool byte0 = 0 == RxMessage.Data[0];
+			bool byte1 = 0 == RxMessage.Data[1];
+			bool byte2 = 0 == RxMessage.Data[2];
+			bool byte3 = 0 == RxMessage.Data[3];
+			bool byte4 = 0 == RxMessage.Data[4];
+			bool byte5 = 0 == RxMessage.Data[5];
+			bool byte6 = 0 == RxMessage.Data[6];
+			bool byte7 = 0 == (RxMessage.Data[7] & 0b01111111);
+
+			brake_pressure = RxMessage.Data[2];
+			implausibility = RxMessage.Data[3];
+
+			inverter_fault = byte0 && byte1 && byte2 && byte3 && byte4 && byte5
+					&& byte6 && byte7;
+			break;
+
 		}
 		HAL_CAN_Receive_IT(&hcan, CAN_FIFO0);
 	}
 
+	bool get_inverter_fault(void) {
+		return inverter_fault;
+	}
 	uint8_t get_brake_pressure() {
 		return brake_pressure;
 	}
@@ -192,23 +214,17 @@ public:
 
 	}
 
-	void transmit_vcu_data(float pressure, float temperature, bool bp_ok, bool start_ok, bool safety_ok) {
+	void transmit_vcu_data(uint8_t state, uint8_t bp_ok, uint8_t start_ok,
+			uint8_t safety_ok, uint8_t inverter_happy) {
 
-		uint16_t int_pressure = (uint16_t) pressure;
-		uint16_t int_temperature = (uint16_t) temperature;
+		TxMessage.StdId = VCU_ID;
+		TxMessage.DLC = 5;
+		TxMessage.Data[0] = state;
+		TxMessage.Data[1] = bp_ok;
+		TxMessage.Data[2] = start_ok;
+		TxMessage.Data[3] = safety_ok;
+		TxMessage.Data[4] = inverter_happy;
 
-		int_pressure = int_pressure * 10;
-		int_temperature = (int_temperature + 50) * 10;
-
-		TxMessage.StdId = INVERTER_ID;
-		TxMessage.DLC = 7;
-		TxMessage.Data[0] = int_pressure % 256;
-		TxMessage.Data[1] = int_pressure /256;
-		TxMessage.Data[2] = int_temperature % 256;
-		TxMessage.Data[3] = int_temperature / 256;
-		TxMessage.Data[4] = bp_ok;
-		TxMessage.Data[5] = start_ok;
-		TxMessage.Data[6] = safety_ok;
 
 		HAL_CAN_Transmit_IT(&hcan);
 
